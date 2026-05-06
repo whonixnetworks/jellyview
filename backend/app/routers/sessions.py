@@ -79,8 +79,8 @@ def _map_jellyfin_session(s, db: Session, jellyfin_url: str) -> dict:
         state = "playing"
 
     # Calculate progress
-    position_ticks = play_state.get("PositionTicks", 0) or 0
-    runtime_ticks = now_playing.get("RunTimeTicks", 0) or 0
+    position_ticks = play_state.get("PositionTicks", 0)
+    runtime_ticks = now_playing.get("RunTimeTicks", 0)
     progress_pct = 0
     if runtime_ticks > 0:
         progress_pct = round((position_ticks / runtime_ticks) * 100, 2)
@@ -89,23 +89,23 @@ def _map_jellyfin_session(s, db: Session, jellyfin_url: str) -> dict:
     avatar_url = None
     if user and user.avatar_url:
         if user.avatar_url.startswith("/"):
-            avatar_url = f"{jellyfin_url}{user.avatar_url}"
+            avatar_url = f"{jellyfin_url.rstrip('/')}{user.avatar_url}"
         elif user.avatar_url.startswith("http"):
             avatar_url = user.avatar_url
     elif user_jellyfin_id:
         primary_tag = s.get("UserPrimaryImageTag")
         if primary_tag:
-            avatar_url = f"{jellyfin_url}/Users/{user_jellyfin_id}/Images/Primary?format=webp&quality=90&tag={primary_tag}"
+            avatar_url = f"{jellyfin_url.rstrip('/')}/Users/{user_jellyfin_id}/Images/Primary?format=webp&quality=90&tag={primary_tag}"
 
     # Build poster/backdrop URLs
     poster_url = None
     backdrop_url = None
     image_tags = now_playing.get("ImageTags", {})
     if image_tags and image_tags.get("Primary"):
-        poster_url = f"{jellyfin_url}/Items/{item_jellyfin_id}/Images/Primary?format=webp&quality=90&tag={image_tags['Primary']}"
+        poster_url = f"{jellyfin_url.rstrip('/')}/Items/{item_jellyfin_id}/Images/Primary?format=webp&quality=90&tag={image_tags['Primary']}"
     backdrop_tags = now_playing.get("BackdropImageTags", [])
     if backdrop_tags:
-        backdrop_url = f"{jellyfin_url}/Items/{item_jellyfin_id}/Images/Backdrop?format=webp&quality=90&tag={backdrop_tags[0]}"
+        backdrop_url = f"{jellyfin_url.rstrip('/')}/Items/{item_jellyfin_id}/Images/Backdrop?format=webp&quality=90&tag={backdrop_tags[0]}"
 
     # Transcode info
     transcode_info = s.get("TranscodingInfo", {})

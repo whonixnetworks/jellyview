@@ -15,6 +15,18 @@ from pydantic import BaseModel
 from .config import settings
 from .database import engine, Base, SessionLocal
 
+# Import routers
+from .routers import auth, dashboard, sessions, users, libraries, items, history, notifications, settings as settings_router, backup
+
+# Import services
+from .services.jellyfin import JellyfinClient
+from .services.websocket import JellyfinWebSocketListener
+from .services.activity_processor import ActivityProcessor
+from .services.session_tracker import SessionTracker
+from .services.notification.dispatcher import NotificationDispatcher
+from .services.scheduler import SchedulerService
+from .services.session_poller import SessionPoller
+
 # Configure logging with file handler so /settings/logs can read them
 import os
 from logging.handlers import RotatingFileHandler
@@ -36,17 +48,7 @@ root_logger.addHandler(file_handler)
 app_logger = logging.getLogger("app")
 app_logger.setLevel(getattr(logging, settings.log_level.upper(), logging.INFO))
 
-# Import routers
-from .routers import auth, dashboard, sessions, users, libraries, items, history, notifications, settings as settings_router, backup
 
-# Import services
-from .services.jellyfin import JellyfinClient
-from .services.websocket import JellyfinWebSocketListener
-from .services.activity_processor import ActivityProcessor
-from .services.session_tracker import SessionTracker
-from .services.notification.dispatcher import NotificationDispatcher
-from .services.scheduler import SchedulerService
-from .services.session_poller import SessionPoller
 
 
 logger = logging.getLogger(__name__)
@@ -331,20 +333,26 @@ async def lifespan(app: FastAPI):
 
                 # Register activity processor as callback for all supported events
                 for event_type in websocket_listener.SUPPORTED_EVENTS:
-                    callback = lambda data, e=event_type: activity_processor.process_event(e, data)
+                    def _make_cb(et):
+                        async def _cb(data):
+                            await activity_processor.process_event(et, data)
+                        return _cb
+                    callback = _make_cb(event_type)
                     websocket_listener.register_callback(event_type, callback)
                 logger.info("Registered activity processor callbacks for WebSocket events")
 
-                websocket_task = asyncio.create_task(websocket_listener.start_listener())
+                asyncio.create_task(websocket_listener.start_listener())
                 logger.info("WebSocket listener started")
             except Exception as e:
                 logger.warning(f"WebSocket connection not available: {e}")
-                websocket_task = None
 
             # Always start session poller as primary or fallback for playback events
             try:
-                for event_type in ["PlaybackStart", "PlaybackStopped", "PlaybackProgress", "SessionStarted", "SessionEnded"]:
-                    callback = lambda data, e=event_type: activity_processor.process_event(e, data)
+                def _make_cb(et):
+                        async def _cb(data):
+                            await activity_processor.process_event(et, data)
+                        return _cb
+                    callback = _make_cb(event_type)
                     session_poller.register_callback(event_type, callback)
                 await session_poller.start()
                 logger.info("Session poller started")
@@ -352,7 +360,6 @@ async def lifespan(app: FastAPI):
                 logger.error(f"Failed to start session poller: {e}")
         else:
             logger.warning("Jellyfin URL or API key not configured, skipping WebSocket connection")
-            websocket_task = None
 
         # Start background scheduler if configured
         if jellyfin_url and jellyfin_api_key:

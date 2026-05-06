@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     # Database
     data_dir: str = "/app/data"
-    db_url: str = "sqlite:////app/data/jellyview.db"
+    db_url: str = "sqlite:///app/data/jellyview.db"
 
     # Server
     host: str = "0.0.0.0"
